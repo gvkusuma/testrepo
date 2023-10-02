@@ -1,0 +1,174 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AWS CloudFormation Template for a 3-tier architecture",
+
+  "Parameters": {
+    "VpcCidrBlock": {
+      "Type": "String",
+      "Description": "CIDR block for the VPC",
+      "Default": "10.0.0.0/16"
+    },
+    "PublicSubnet1CidrBlock": {
+      "Type": "String",
+      "Description": "CIDR block for the first public subnet",
+      "Default": "10.0.1.0/24"
+    },
+    "PublicSubnet2CidrBlock": {
+      "Type": "String",
+      "Description": "CIDR block for the second public subnet",
+      "Default": "10.0.2.0/24"
+    },
+    "PrivateSubnet1CidrBlock": {
+      "Type": "String",
+      "Description": "CIDR block for the first private subnet",
+      "Default": "10.0.3.0/24"
+    },
+    "PrivateSubnet2CidrBlock": {
+      "Type": "String",
+      "Description": "CIDR block for the second private subnet",
+      "Default": "10.0.4.0/24"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Description": "EC2 instance type for the application and presentation tiers",
+      "Default": "t2.micro"
+    },
+    "DBInstanceType": {
+      "Type": "String",
+      "Description": "RDS instance type for the data tier",
+      "Default": "db.t2.micro"
+    },
+    "DBPassword": {
+      "Type": "String",
+      "Description": "Password for the RDS instance",
+      "MinLength": "8",
+      "NoEcho": true
+    },
+    "DBAllocatedStorage": {
+      "Type": "Number",
+      "Description": "Allocated storage for RDS (GB)",
+      "Default": "20"
+    }
+  },
+
+  "Resources": {
+    "MyVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": { "Ref": "VpcCidrBlock" }
+      }
+    },
+    "PublicSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": { "Ref": "MyVPC" },
+        "CidrBlock": { "Ref": "PublicSubnet1CidrBlock" },
+        "AvailabilityZone": { "Fn::Select": ["0", { "Fn::GetAZs": "" }] }
+      }
+    },
+    "PublicSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": { "Ref": "MyVPC" },
+        "CidrBlock": { "Ref": "PublicSubnet2CidrBlock" },
+        "AvailabilityZone": { "Fn::Select": ["1", { "Fn::GetAZs": "" }] }
+      }
+    },
+    "PrivateSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": { "Ref": "MyVPC" },
+        "CidrBlock": { "Ref": "PrivateSubnet1CidrBlock" },
+        "AvailabilityZone": { "Fn::Select": ["0", { "Fn::GetAZs": "" }] }
+      }
+    },
+    "PrivateSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": { "Ref": "MyVPC" },
+        "CidrBlock": { "Ref": "PrivateSubnet2CidrBlock" },
+        "AvailabilityZone": { "Fn::Select": ["1", { "Fn::GetAZs": "" }] }
+      }
+    },
+    "MyInternetGateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": { "Ref": "MyVPC" },
+        "InternetGatewayId": { "Ref": "MyInternetGateway" }
+      }
+    },
+    "MyRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": { "Ref": "MyVPC" }
+      }
+    },
+    "PublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "AttachGateway",
+      "Properties": {
+        "RouteTableId": { "Ref": "MyRouteTable" },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": { "Ref": "MyInternetGateway" }
+      }
+    },
+    "PresentationInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": { "Ref": "InstanceType" },
+        "SubnetId": { "Ref": "PublicSubnet1" },
+        "ImageId": "ami-XXXXXXXXXXXXXXXXX", // Specify your AMI ID
+        "KeyName": "YourKeyPair" // Specify your key pair name
+      }
+    },
+    "ApplicationInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": { "Ref": "InstanceType" },
+        "SubnetId": { "Ref": "PrivateSubnet1" },
+        "ImageId": "ami-XXXXXXXXXXXXXXXXX", // Specify your AMI ID
+        "KeyName": "YourKeyPair" // Specify your key pair name
+      }
+    },
+    "MyDBInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBInstanceIdentifier": "mydbinstance",
+        "AllocatedStorage": { "Ref": "DBAllocatedStorage" },
+        "DBInstanceClass": { "Ref": "DBInstanceType" },
+        "Engine": "mysql",
+        "MasterUsername": "admin",
+        "MasterUserPassword": { "Ref": "DBPassword" },
+        "DBSubnetGroupName": { "Ref": "MyDBSubnetGroup" }
+      }
+    },
+    "MyDBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet group for RDS",
+        "SubnetIds": [
+          { "Ref": "PrivateSubnet1" },
+          { "Ref": "PrivateSubnet2" }
+        ]
+      }
+    }
+  },
+
+  "Outputs": {
+    "PresentationInstanceID": {
+      "Description": "ID of the Presentation EC2 Instance",
+      "Value": { "Ref": "PresentationInstance" }
+    },
+    "ApplicationInstanceID": {
+      "Description": "ID of the Application EC2 Instance",
+      "Value": { "Ref": "ApplicationInstance" }
+    },
+    "RDSInstanceEndpoint": {
+      "Description": "Endpoint of the RDS instance",
+      "Value": { "Fn::GetAtt": ["MyDBInstance", "Endpoint.Address"] }
+    }
+  }
+}
